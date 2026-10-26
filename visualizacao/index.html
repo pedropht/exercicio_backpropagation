@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>Laboratório visual de retropropagação</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+  <div class="grade-fundo" aria-hidden="true"></div>
+  <header class="cabecalho">
+    <div>
+      <p class="rotulo-superior">MLP · IRIS · CÁLCULO EXPLÍCITO</p>
+      <h1>Laboratório de <span>retropropagação</span></h1>
+      <p class="subtitulo">Observe a informação avançar, o erro retornar e os pesos mudarem.</p>
+    </div>
+    <nav class="alternador-visao" aria-label="Área da aplicação">
+      <button class="botao-visao ativo" data-visao="treinamento">Treinamento</button>
+      <button class="botao-visao" data-visao="classificacao">Classificação</button>
+    </nav>
+  </header>
+
+  <main class="aplicacao">
+    <aside class="painel controles" aria-label="Parâmetros do experimento">
+      <div class="titulo-painel">
+        <span class="numero-painel">01</span>
+        <div>
+          <p>Experimento</p>
+          <h2>Parâmetros</h2>
+        </div>
+      </div>
+
+      <div class="campo">
+        <span>Modo de execução</span>
+        <div class="alternador-modo" role="group" aria-label="Modo de treinamento">
+          <button class="ativo" data-modo="normal">Normal</button>
+          <button data-modo="debug">Debug</button>
+        </div>
+      </div>
+
+      <label class="campo">
+        <span>Taxa de aprendizagem <output id="valor-taxa">1,00</output></span>
+        <input id="taxa-aprendizagem" type="range" min="0.01" max="3" step="0.01" value="1">
+      </label>
+
+      <div class="linha-campos">
+        <label class="campo">
+          <span>Épocas</span>
+          <input id="quantidade-epocas" type="number" min="1" max="20000" step="100" value="3000">
+        </label>
+        <label class="campo">
+          <span>Semente</span>
+          <input id="semente" type="number" min="0" max="999999" value="42">
+        </label>
+      </div>
+
+      <div class="campo">
+        <div class="cabecalho-campo">
+          <span>Camadas ocultas</span>
+          <button id="adicionar-camada" class="botao-icone" title="Adicionar camada" aria-label="Adicionar camada oculta">+</button>
+        </div>
+        <div id="editor-camadas" class="editor-camadas"></div>
+      </div>
+
+      <label class="campo">
+        <span>Épocas por quadro <output id="valor-lote-visual">10</output></span>
+        <input id="epocas-por-quadro" type="range" min="1" max="100" step="1" value="10">
+      </label>
+
+      <label class="campo">
+        <span>Exemplo acompanhado</span>
+        <select id="exemplo-acompanhado"></select>
+      </label>
+
+      <div id="controles-normal" class="acoes-principais">
+        <button id="botao-reiniciar" class="botao secundario">Reiniciar</button>
+        <button id="botao-passo" class="botao secundario">+ 1 época</button>
+        <button id="botao-executar" class="botao primario">▶ Treinar</button>
+      </div>
+
+      <div id="controles-debug" class="controles-debug" hidden>
+        <div class="grade-comandos-debug">
+          <button id="debug-iniciar" class="botao primario">Iniciar</button>
+          <button id="debug-anterior" class="botao secundario" disabled>← Anterior</button>
+          <button id="debug-proximo" class="botao secundario" disabled>Próximo →</button>
+          <button id="debug-automatico" class="botao secundario" disabled>Executar</button>
+          <button id="debug-proxima-epoca" class="botao secundario" disabled>Próxima época</button>
+          <button id="debug-reiniciar" class="botao secundario">Reiniciar</button>
+        </div>
+        <label class="campo">
+          <span>Intervalo <output id="valor-velocidade-debug">400 ms</output></span>
+          <input id="velocidade-debug" type="range" min="80" max="1200" step="40" value="400">
+        </label>
+      </div>
+
+      <div class="nota-metodo">
+        <strong>Lote completo</strong>
+        <p>Uma atualização usa a média dos gradientes dos 120 exemplos de treino.</p>
+      </div>
+    </aside>
+
+    <section id="visao-treinamento" class="conteudo-visao ativo">
+      <div class="metricas" aria-label="Métricas do treinamento">
+        <article class="metrica destaque">
+          <span>Época</span>
+          <strong id="metrica-epoca">0</strong>
+          <small id="estado-treinamento">rede inicializada</small>
+        </article>
+        <article class="metrica">
+          <span>Perda média</span>
+          <strong id="metrica-perda">—</strong>
+          <small>½ Σ(ŷ − y)²</small>
+        </article>
+        <article class="metrica">
+          <span>Acurácia treino</span>
+          <strong id="metrica-acuracia-treino">—</strong>
+          <small>120 flores</small>
+        </article>
+        <article class="metrica">
+          <span>Acurácia teste</span>
+          <strong id="metrica-acuracia-teste">—</strong>
+          <small>30 flores não vistas</small>
+        </article>
+      </div>
+
+      <div class="grade-visualizacoes">
+        <article class="painel painel-rede">
+          <div class="cabecalho-grafico">
+            <div>
+              <p>Forward → perda → backward</p>
+              <h2>Rede em atividade</h2>
+            </div>
+            <div class="legenda-fluxo">
+              <span><i class="amostra positivo"></i> peso +</span>
+              <span><i class="amostra negativo"></i> peso −</span>
+            </div>
+          </div>
+          <div id="etapas-fluxo" class="etapas-fluxo" aria-label="Etapa do algoritmo">
+            <button data-etapa="entrada" class="ativa">1 entrada</button>
+            <button data-etapa="frente">2 propagação</button>
+            <button data-etapa="perda">3 perda</button>
+            <button data-etapa="tras">4 retropropagação</button>
+            <button data-etapa="atualizacao">5 atualização</button>
+          </div>
+          <section id="operacao-debug" class="operacao-debug" aria-live="polite" hidden>
+            <div class="cabecalho-operacao">
+              <span id="debug-identificacao">PASSO 0</span>
+              <strong id="debug-nome-operacao">Aguardando início</strong>
+            </div>
+            <p id="debug-descricao-operacao"></p>
+            <div class="formula-debug">
+              <span>Fórmula</span>
+              <code id="debug-formula-operacao">—</code>
+            </div>
+            <div class="substituicao-debug">
+              <div><span>Substituição</span><code id="debug-substituicao-operacao">—</code></div>
+              <div><span>Resultado</span><code id="debug-resultado-operacao">—</code></div>
+            </div>
+            <p id="debug-consequencia-operacao" class="consequencia-debug"></p>
+          </section>
+          <div class="area-rede">
+            <svg id="grafico-rede" role="img" aria-label="Diagrama da rede neural"></svg>
+            <div id="detalhe-neuronio" class="detalhe-neuronio">
+              <span>Selecione um neurônio ou conexão</span>
+            </div>
+          </div>
+        </article>
+
+        <article class="painel painel-curva">
+          <div class="cabecalho-grafico">
+            <div>
+              <p>Convergência real</p>
+              <h2>Perda por época</h2>
+            </div>
+            <span id="variacao-perda" class="selo">aguardando</span>
+          </div>
+          <canvas id="grafico-perda" aria-label="Curva da perda média"></canvas>
+        </article>
+
+        <article class="painel painel-pesos">
+          <div class="cabecalho-grafico">
+            <div>
+              <p>Sinal e magnitude</p>
+              <h2>Mapa dos pesos</h2>
+            </div>
+            <select id="seletor-camada-pesos" aria-label="Camada do mapa de pesos"></select>
+          </div>
+          <canvas id="mapa-pesos" aria-label="Mapa de calor dos pesos"></canvas>
+          <div id="equacao-atualizacao" class="equacao-atualizacao"></div>
+        </article>
+
+        <article class="painel painel-gradiente">
+          <div class="cabecalho-grafico">
+            <div>
+              <p>Projeção em dois parâmetros</p>
+              <h2>Descida do gradiente</h2>
+            </div>
+            <button id="recalcular-superficie" class="botao-texto">recalcular corte</button>
+          </div>
+          <div class="seletores-parametros">
+            <select id="parametro-eixo-x" aria-label="Parâmetro do eixo horizontal"></select>
+            <select id="parametro-eixo-y" aria-label="Parâmetro do eixo vertical"></select>
+          </div>
+          <canvas id="grafico-gradiente" aria-label="Corte local da função de perda"></canvas>
+          <p class="aviso-grafico">Corte local: os demais parâmetros ficam fixos no estado em que a superfície foi calculada.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="visao-classificacao" class="conteudo-visao">
+      <div class="grade-classificacao">
+        <article class="painel formulario-flor">
+          <div class="cabecalho-grafico">
+            <div>
+              <p>Propagação sem atualização</p>
+              <h2>Classificar uma flor</h2>
+            </div>
+            <select id="seletor-flor-teste" aria-label="Flor do conjunto de teste"></select>
+          </div>
+          <div id="campos-flor" class="campos-flor"></div>
+          <button id="botao-classificar" class="botao primario largura-total">Classificar entrada</button>
+          <div class="resultado-classe">
+            <p>Classe predita</p>
+            <strong id="classe-predita">—</strong>
+            <span id="classe-esperada">Selecione uma flor ou altere as medidas.</span>
+          </div>
+          <div id="barras-saida" class="barras-saida"></div>
+        </article>
+
+        <article class="painel painel-paralelas">
+          <div class="cabecalho-grafico">
+            <div>
+              <p>Quatro dimensões simultâneas</p>
+              <h2>Coordenadas paralelas</h2>
+            </div>
+            <select id="filtro-paralelas" aria-label="Dados das coordenadas paralelas">
+              <option value="teste">Teste</option>
+              <option value="todos">Todas as flores</option>
+            </select>
+          </div>
+          <canvas id="grafico-paralelas" aria-label="Quatro atributos Iris em coordenadas paralelas"></canvas>
+        </article>
+
+        <article class="painel painel-projecao">
+          <div class="cabecalho-grafico">
+            <div>
+              <p>Corte da fronteira de decisão</p>
+              <h2>Projeção dos atributos</h2>
+            </div>
+            <div class="alternador-compacto">
+              <button data-projecao="2d" class="ativo">2D</button>
+              <button data-projecao="3d">3D</button>
+            </div>
+          </div>
+          <div class="seletores-projecao">
+            <label>X <select id="atributo-x"></select></label>
+            <label>Y <select id="atributo-y"></select></label>
+            <label id="controle-atributo-z" hidden>Z <select id="atributo-z"></select></label>
+          </div>
+          <canvas id="grafico-projecao" aria-label="Projeção dos atributos e da fronteira de decisão"></canvas>
+          <p class="aviso-grafico">Os atributos fora dos eixos usam os valores da flor selecionada. Arraste a projeção 3D para girar.</p>
+        </article>
+
+        <article class="painel painel-confusao">
+          <div class="cabecalho-grafico">
+            <div>
+              <p>Esperada × predita</p>
+              <h2>Matriz de confusão</h2>
+            </div>
+            <span id="resumo-teste" class="selo">rede não treinada</span>
+          </div>
+          <div id="matriz-confusao" class="matriz-confusao"></div>
+          <div id="lista-erros" class="lista-erros"></div>
+        </article>
+      </div>
+    </section>
+
+    <aside id="inspetor-debug" class="painel inspetor-debug" aria-label="Inspetor do depurador" hidden>
+      <div class="cabecalho-inspetor">
+        <div>
+          <p>Estado sincronizado</p>
+          <h2>Inspetor</h2>
+        </div>
+        <button id="recolher-inspetor" class="botao-icone" aria-label="Recolher inspetor" title="Recolher inspetor">×</button>
+      </div>
+      <div id="resumo-debug" class="resumo-debug"></div>
+      <div id="arvore-debug" class="arvore-debug">
+        <p class="estado-vazio">Inicie o depurador para inspecionar as variáveis.</p>
+      </div>
+      <details class="historico-debug" open>
+        <summary>Histórico de execução</summary>
+        <div id="lista-historico-debug"></div>
+      </details>
+    </aside>
+    <button id="abrir-inspetor" class="abrir-inspetor" hidden>Inspetor</button>
+  </main>
+
+  <footer class="rodape">
+    <div>
+      <span class="pulso"></span>
+      <span id="status-aplicacao">Preparando experimento…</span>
+    </div>
+    <button id="abrir-validacoes" class="botao-texto">verificações matemáticas</button>
+  </footer>
+
+  <dialog id="dialogo-validacoes">
+    <div class="cabecalho-dialogo">
+      <div>
+        <p>Autoverificação</p>
+        <h2>Consistência matemática</h2>
+      </div>
+      <button id="fechar-validacoes" class="botao-icone" aria-label="Fechar">×</button>
+    </div>
+    <div id="resultados-validacoes" class="resultados-validacoes"></div>
+    <button id="executar-validacoes" class="botao primario largura-total">Executar novamente</button>
+  </dialog>
+
+  <noscript>Esta aplicação precisa de JavaScript para executar a rede neural.</noscript>
+  <script src="dados-iris.js" defer></script>
+  <script src="rede-neural.js" defer></script>
+  <script src="depurador.js" defer></script>
+  <script src="visualizacoes.js" defer></script>
+  <script src="validacoes.js" defer></script>
+  <script src="aplicacao.js" defer></script>
+</body>
+</html>
